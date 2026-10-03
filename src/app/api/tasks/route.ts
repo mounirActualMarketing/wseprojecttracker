@@ -1,20 +1,20 @@
-import { guard } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { db, fromRow, INSERT_SQL, insertParams } from "@/lib/db";
 import type { Task } from "@/lib/types";
 
-// GET: all tasks. POST: create one. PUT: replace the whole plan (reset, clear, import).
+// GET: all tasks (signed in). POST: create one (member). PUT: replace the whole plan (admin: reset, clear, import).
 
 export async function GET(request: Request) {
-  const denied = guard(request);
-  if (denied) return denied;
+  const user = await requireUser(request, "viewer");
+  if (user instanceof Response) return user;
   const sql = db();
   const rows = await sql.query("SELECT * FROM tasks ORDER BY sort, created_at");
   return Response.json(rows.map((r) => fromRow(r as Parameters<typeof fromRow>[0])));
 }
 
 export async function POST(request: Request) {
-  const denied = guard(request);
-  if (denied) return denied;
+  const user = await requireUser(request, "member");
+  if (user instanceof Response) return user;
   const task = (await request.json()) as Partial<Task>;
   if (!task.id || !task.title) return Response.json({ error: "id and title are required" }, { status: 400 });
   const sql = db();
@@ -24,8 +24,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const denied = guard(request);
-  if (denied) return denied;
+  const user = await requireUser(request, "admin");
+  if (user instanceof Response) return user;
   const tasks = (await request.json()) as Partial<Task>[];
   if (!Array.isArray(tasks)) return Response.json({ error: "expected an array of tasks" }, { status: 400 });
   const sql = db();

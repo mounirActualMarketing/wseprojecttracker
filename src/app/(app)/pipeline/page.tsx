@@ -4,18 +4,20 @@ import { useState } from "react";
 import { card, Empty, isOverdue, Loading } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { todayISO } from "@/lib/dates";
-import { actions } from "@/lib/store";
-import { PHASES, statusOf, SYSTEMS, type Phase, type SystemId } from "@/lib/types";
+import { actions, useStore } from "@/lib/store";
+import { PHASES, statusOf, type Phase, type SystemId } from "@/lib/types";
 
 export default function PipelineView() {
   const { tasks, hydrated } = useFilteredTasks();
-  const { openEdit, openNew } = useUI();
+  const { systems } = useStore();
+  const { openEdit, openNew, filters } = useUI();
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   if (!hydrated) return <Loading />;
   const today = todayISO();
 
-  const rows = SYSTEMS.filter((s) => tasks.some((t) => t.system === s.id));
+  // every system gets a row so tasks can be dragged into a new one
+  const rows = systems.filter((s) => filters.system === "all" || s.id === filters.system);
   const total = Math.max(1, tasks.length);
 
   const drop = (system: SystemId, phase: Phase) => {

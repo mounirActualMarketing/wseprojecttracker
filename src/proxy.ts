@@ -1,11 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { authFailure, checkAuth } from "@/lib/auth";
 
-// Password-protects every page and API route. The API routes also check on their own.
+// Sends visitors without a session cookie to /login. This is only the first gate:
+// every API route validates the session and role against the database itself.
+
+const SESSION_COOKIE = "wse_session";
+const PUBLIC = ["/login", "/setup", "/invite/", "/api/auth/"];
+
 export function proxy(request: NextRequest) {
-  const result = checkAuth(request.headers.get("authorization"));
-  if (result !== "ok") return authFailure(result);
-  return NextResponse.next();
+  const { pathname, search } = request.nextUrl;
+  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p))) return NextResponse.next();
+  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next();
+
+  if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const url = new URL("/login", request.url);
+  if (pathname !== "/") url.searchParams.set("next", pathname + search);
+  return NextResponse.redirect(url);
 }
 
 export const config = {

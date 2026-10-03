@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Avatar, Empty, isOverdue, Loading } from "@/components/bits";
+import { Assignees, Empty, isOverdue, Loading } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { addDays, diffDays, fmtShort, shiftISO, startOfWeek, toDate, todayISO, toISO } from "@/lib/dates";
-import { actions } from "@/lib/store";
-import { statusOf, SYSTEMS, TERM_END, TERM_START, type Task } from "@/lib/types";
+import { actions, useStore } from "@/lib/store";
+import { statusOf, TERM_END, TERM_START, type Task } from "@/lib/types";
 
 const ZOOMS = [
   { id: "day", label: "Days", w: 30 },
@@ -20,6 +20,7 @@ type Drag = { id: string; mode: "move" | "resize"; x0: number; delta: number; mo
 
 export default function PlannerView() {
   const { tasks, hydrated } = useFilteredTasks();
+  const { systems } = useStore();
   const { openEdit, openNew } = useUI();
   const [zoom, setZoom] = useState<(typeof ZOOMS)[number]["id"]>("week");
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -35,7 +36,7 @@ export default function PlannerView() {
   const width = days * dayW;
   const x = (iso: string) => diffDays(rangeStart, toDate(iso)) * dayW;
 
-  const groups = SYSTEMS.map((s) => ({
+  const groups = systems.map((s) => ({
     system: s,
     tasks: tasks.filter((t) => t.system === s.id).sort((a, b) => a.start.localeCompare(b.start)),
   })).filter((g) => g.tasks.length);
@@ -170,7 +171,7 @@ export default function PlannerView() {
                         >
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: st.color }} title={st.label} />
                           <span className={`min-w-0 flex-1 truncate ${done ? "text-faint line-through" : "text-ink"}`}>{t.title}</span>
-                          <Avatar name={t.owner} size={18} />
+                          <Assignees task={t} size={18} max={2} />
                         </button>
                         <div className="relative" style={{ width }}>
                           <div

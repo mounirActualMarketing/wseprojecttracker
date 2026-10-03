@@ -20,11 +20,11 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Avatar, ChecklistBadge, Empty, isOverdue, Loading, StatusPill } from "@/components/bits";
+import { Assignees, ChecklistBadge, Empty, isOverdue, Loading, StatusPill } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { fmtShort, todayISO } from "@/lib/dates";
-import { actions } from "@/lib/store";
-import { SYSTEMS, systemOf, type SystemId, type Task } from "@/lib/types";
+import { actions, systemOf, useStore } from "@/lib/store";
+import type { System, SystemId, Task } from "@/lib/types";
 
 type Mode = "deps" | "systems";
 
@@ -49,7 +49,7 @@ function TaskNode({ data }: NodeProps<Node<TaskNodeData>>) {
       <div className={`text-[13px] font-medium leading-snug ${task.status === "done" ? "text-faint line-through" : "text-ink"}`}>{task.title}</div>
       <div className="mt-2 flex items-center justify-between">
         <span className="flex items-center gap-1.5">
-          <Avatar name={task.owner} size={18} />
+          <Assignees task={task} size={18} max={2} />
           <span className={`text-[11px] ${overdue ? "font-medium text-[#D93F45]" : "text-muted"}`}>{fmtShort(task.due)}</span>
         </span>
         <ChecklistBadge task={task} />
@@ -95,7 +95,7 @@ function SystemNode({ data }: NodeProps<Node<SystemNodeData>>) {
 const nodeTypes = { task: TaskNode, system: SystemNode };
 const MAX_ROWS = 6;
 
-function layoutDeps(tasks: Task[], today: string): { nodes: Node[]; edges: Edge[] } {
+function layoutDeps(tasks: Task[], systems: System[], today: string): { nodes: Node[]; edges: Edge[] } {
   const ids = new Set(tasks.map((t) => t.id));
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const level = new Map<string, number>();
@@ -115,7 +115,7 @@ function layoutDeps(tasks: Task[], today: string): { nodes: Node[]; edges: Edge[
     const l = level.get(t.id) ?? 0;
     levels.set(l, [...(levels.get(l) ?? []), t]);
   });
-  const sysIdx = (t: Task) => SYSTEMS.findIndex((s) => s.id === t.system);
+  const sysIdx = (t: Task) => systems.findIndex((s) => s.id === t.system);
 
   // tall levels wrap into several columns so the graph stays readable
   const nodes: Node[] = [];
@@ -156,7 +156,7 @@ function layoutDeps(tasks: Task[], today: string): { nodes: Node[]; edges: Edge[
   return { nodes, edges };
 }
 
-function layoutSystems(tasks: Task[]): { nodes: Node[]; edges: Edge[] } {
+function layoutSystems(tasks: Task[], systems: System[]): { nodes: Node[]; edges: Edge[] } {
   const stats = (id: SystemId) => {
     const list = tasks.filter((t) => t.system === id);
     return {
@@ -165,11 +165,14 @@ function layoutSystems(tasks: Task[]): { nodes: Node[]; edges: Edge[] } {
       active: list.filter((t) => t.status === "in_progress" || t.status === "review" || t.status === "waiting").length,
     };
   };
-  const ring = SYSTEMS.filter((s) => s.id !== "orchestration");
+  // the orchestration layer is the hub when it exists, otherwise the first system
+  const hub = systems.find((s) => s.id === "orchestration") ?? systems[0];
+  if (!hub) return { nodes: [], edges: [] };
+  const ring = systems.filter((s) => s.id !== hub.id);
   const R = 340;
   const angle = (i: number) => (i / ring.length) * Math.PI * 2 - Math.PI / 2;
   const nodes: Node[] = [
-    { id: "sys-orchestration", type: "system", position: { x: -130, y: -40 }, data: { system: "orchestration", center: true, ...stats("orchestration") }, deletable: false, connectable: false },
+    { id: `sys-${hub.id}`, type: "system", position: { x: -130, y: -40 }, data: { system: hub.id, center: true, ...stats(hub.id) }, deletable: false, connectable: false },
     ...ring.map(
       (s, i) =>
         ({
@@ -188,7 +191,7 @@ function layoutSystems(tasks: Task[]): { nodes: Node[]; edges: Edge[] } {
     const side = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "bottom" : "top";
     return {
       id: `e-${s.id}`,
-      source: "sys-orchestration",
+      source: `sys-${hub.id}`,
       target: `sys-${s.id}`,
       sourceHandle: `s-${side}`,
       targetHandle: `t-${OPPOSITE[side]}`,
@@ -222,7 +225,7 @@ export default function FlowView() {
         <p className="text-xs text-faint">
           {mode === "deps"
             ? "Arrows point from a task to the tasks waiting on it. Drag from the purple handle to another task to link them, select an arrow and press Backspace to remove it."
-            : "The orchestration layer drives the other systems. Click a system to see its tasks."}
+            : "The hub system drives the others. Click a system to see its tasks."}
         </p>
       </div>
       {mode === "deps" && tasks.length === 0 ? (
@@ -237,7 +240,11 @@ export default function FlowView() {
 function Canvas({ mode, tasks, onPickSystem }: { mode: Mode; tasks: Task[]; onPickSystem: () => void }) {
   const { openEdit, setFilters } = useUI();
   const today = todayISO();
-  const computed = useMemo(() => (mode === "deps" ? layoutDeps(tasks, today) : layoutSystems(tasks)), [mode, tasks, today]);
+  const { systems } = useStore();
+  const computed = useMemo(
+    () => (mode === "deps" ? layoutDeps(tasks, systems, today) : layoutSystems(tasks, systems)),
+    [mode, tasks, systems, today],
+  );
 
   // keep dragged positions and selection when the task list changes
   const [nodes, setNodes] = useState<Node[]>(computed.nodes);

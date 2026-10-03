@@ -1,10 +1,10 @@
 "use client";
 
 import { diffDays, fmtShort, toDate } from "@/lib/dates";
+import { systemOf, teamOf, userOf } from "@/lib/store";
 import {
   priorityOf,
   statusOf,
-  systemOf,
   tagStyle,
   type Priority,
   type Status,
@@ -79,6 +79,33 @@ export function Avatar({ name, size = 22 }: { name: string; size?: number }) {
       title={name}
     >
       {initials || "?"}
+    </span>
+  );
+}
+
+/** Overlapping avatars for a task's assignees; falls back to the responsible team's name. */
+export function Assignees({ task, size = 22, max = 3 }: { task: Task; size?: number; max?: number }) {
+  const people = task.assignees.map((id) => userOf(id)).filter((u): u is NonNullable<typeof u> => !!u);
+  if (!people.length) {
+    const team = teamOf(task.team);
+    return team ? (
+      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: team.color }} title={`${team.name} (no one assigned yet)`}>
+        {team.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase()}
+      </span>
+    ) : (
+      <span className="inline-flex items-center justify-center rounded-full border border-dashed border-line-strong text-faint" style={{ width: size, height: size, fontSize: size * 0.5 }} title="Unassigned">
+        +
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center" title={people.map((p) => p.name).join(", ")}>
+      {people.slice(0, max).map((p, i) => (
+        <span key={p.id} className="rounded-full ring-2 ring-white" style={{ marginLeft: i ? -size * 0.3 : 0 }}>
+          <Avatar name={p.name} size={size} />
+        </span>
+      ))}
+      {people.length > max ? <span className="ml-1 text-[10px] text-muted">+{people.length - max}</span> : null}
     </span>
   );
 }

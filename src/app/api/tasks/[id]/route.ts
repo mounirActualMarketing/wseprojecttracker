@@ -1,11 +1,11 @@
-import { guard } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { COLUMNS, db } from "@/lib/db";
 
 // PATCH: update some fields of one task. DELETE: remove it and drop it from other tasks' dependencies.
 
 export async function PATCH(request: Request, ctx: RouteContext<"/api/tasks/[id]">) {
-  const denied = guard(request);
-  if (denied) return denied;
+  const user = await requireUser(request, "member");
+  if (user instanceof Response) return user;
   const { id } = await ctx.params;
   const patch = (await request.json()) as Record<string, unknown>;
 
@@ -27,8 +27,8 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/tasks/[id]
 }
 
 export async function DELETE(request: Request, ctx: RouteContext<"/api/tasks/[id]">) {
-  const denied = guard(request);
-  if (denied) return denied;
+  const user = await requireUser(request, "member");
+  if (user instanceof Response) return user;
   const { id } = await ctx.params;
   const sql = db();
   await sql.transaction([

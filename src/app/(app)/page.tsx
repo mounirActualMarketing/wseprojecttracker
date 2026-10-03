@@ -1,24 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { Avatar, card, ChecklistBadge, DueLabel, Empty, isOverdue, Loading, PriorityFlag, StatusPill, SystemTag } from "@/components/bits";
+import { Assignees, card, ChecklistBadge, DueLabel, Empty, isOverdue, Loading, PriorityFlag, StatusPill, SystemTag } from "@/components/bits";
 import { BRAND, BrandStrip, PartnerLockup } from "@/components/brand";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { diffDays, fmtLong, shiftISO, toDate, todayISO } from "@/lib/dates";
-import { actions } from "@/lib/store";
-import { STATUSES, SYSTEMS, TERM_END, TERM_START, type Task } from "@/lib/types";
+import { actions, useStore } from "@/lib/store";
+import { STATUSES, TERM_END, TERM_START, type Task } from "@/lib/types";
 
 const REQ = "Request to WSE";
 
 export default function Overview() {
   const { tasks, hydrated } = useFilteredTasks();
+  const { systems, me } = useStore();
   const { openNew, openEdit, setFilters } = useUI();
   if (!hydrated) return <Loading />;
 
   const today = todayISO();
   const done = tasks.filter((t) => t.status === "done").length;
   const open = tasks.length - done;
-  const waitingOnWse = tasks.filter((t) => t.owner === "WSE" && t.status !== "done");
+  const waitingOnWse = tasks.filter((t) => t.team === "wse" && t.status !== "done");
+  const mine = me ? tasks.filter((t) => t.assignees.includes(me.id) && t.status !== "done") : [];
   const overdue = tasks.filter((t) => isOverdue(t, today));
   const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
   const requests = tasks
@@ -32,8 +34,8 @@ export default function Overview() {
   const elapsed = Math.min(termDays, Math.max(0, diffDays(toDate(TERM_START), toDate(today)) + 1));
 
   const kpis = [
-    { label: "Open tasks", value: open, sub: `${tasks.length} in total`, color: "#4194F6" },
-    { label: "Completed", value: `${pct}%`, sub: `${done} done`, color: "#10B981" },
+    { label: "Open tasks", value: open, sub: `${pct}% of ${tasks.length} completed`, color: "#4194F6" },
+    { label: "Assigned to me", value: mine.length, sub: "open tasks on your plate", color: "#7B68EE" },
     { label: "Waiting on WSE", value: waitingOnWse.length, sub: "requests not delivered yet", color: "#F59E0B" },
     { label: "Overdue", value: overdue.length, sub: "past due, not done", color: "#E5484D" },
   ];
@@ -140,7 +142,7 @@ export default function Overview() {
               {soon.map((t) => (
                 <li key={t.id}>
                   <button onClick={() => openEdit(t.id)} className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-subtle">
-                    <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: SYSTEMS.find((s) => s.id === t.system)?.color }} />
+                    <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: systems.find((s) => s.id === t.system)?.color }} />
                     <span className="min-w-0 flex-1 truncate text-sm text-ink">{t.title}</span>
                     <StatusPill id={t.status} />
                     <span className="w-16 text-right"><DueLabel task={t} today={today} /></span>
@@ -157,7 +159,7 @@ export default function Overview() {
             <Link href="/pipeline" className="text-xs text-muted hover:text-brand">Pipeline</Link>
           </div>
           <div className="space-y-3.5">
-            {SYSTEMS.map((s) => {
+            {systems.map((s) => {
               const list = tasks.filter((t) => t.system === s.id);
               if (!list.length) return null;
               const d = list.filter((t) => t.status === "done").length;
@@ -201,7 +203,7 @@ function RequestRow({ t, today, onOpen }: { t: Task; today: string; onOpen: () =
       <span className="hidden sm:block"><PriorityFlag id={t.priority} /></span>
       <StatusPill id={t.status} />
       <span className="hidden w-16 text-right sm:block"><DueLabel task={t} today={today} /></span>
-      <Avatar name={t.owner} />
+      <Assignees task={t} />
     </li>
   );
 }

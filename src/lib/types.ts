@@ -1,13 +1,4 @@
-export type SystemId =
-  | "program"
-  | "orchestration"
-  | "ads"
-  | "whatsapp"
-  | "social"
-  | "b2b"
-  | "franchise"
-  | "lp"
-  | "sync";
+export type SystemId = string;
 
 export type Status = "backlog" | "todo" | "in_progress" | "waiting" | "review" | "done";
 export type Phase = "discovery" | "build" | "testing" | "launch" | "optimise";
@@ -27,7 +18,8 @@ export interface Task {
   status: Status;
   phase: Phase;
   priority: Priority;
-  owner: string;
+  team: string | null; // responsible team id
+  assignees: string[]; // user ids
   start: string; // yyyy-mm-dd
   due: string; // yyyy-mm-dd
   dependsOn: string[];
@@ -35,8 +27,48 @@ export interface Task {
   checklist: ChecklistItem[];
 }
 
-// color = solid (bars, dots), dark enough for white text
-export const SYSTEMS: { id: SystemId; name: string; short: string; color: string }[] = [
+export interface System {
+  id: SystemId;
+  name: string;
+  short: string;
+  color: string; // solid (bars, dots), dark enough for white text
+}
+
+export type Role = "admin" | "member" | "viewer";
+
+export interface Team {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  team: string | null;
+  active: boolean;
+  pending: boolean; // invited, password not set yet
+}
+
+export const ROLES: { id: Role; label: string; hint: string }[] = [
+  { id: "admin", label: "Admin", hint: "Everything, including team, systems and plan reset" },
+  { id: "member", label: "Member", hint: "Create and edit tasks, add systems" },
+  { id: "viewer", label: "Viewer", hint: "Read only" },
+];
+
+// Picker palette for systems and teams (Asana/ClickUp-like, white text readable)
+export const PALETTE = ["#64748B", "#7B68EE", "#4573D2", "#2E9E6B", "#E0559B", "#9D5BD2", "#E8743B", "#1A9E99", "#D9485F", "#B7791F", "#0E7490", "#4D7C0F"];
+
+// Teams the database starts with
+export const DEFAULT_TEAMS: Team[] = [
+  { id: "wse", name: "Wall Street English", color: "#153359" },
+  { id: "csm", name: "Clicksalesmedia", color: "#B7791F" },
+];
+
+// Systems the database starts with; after that they are managed in the app
+export const DEFAULT_SYSTEMS: System[] = [
   { id: "program", name: "Programme and Governance", short: "Programme", color: "#64748B" },
   { id: "orchestration", name: "AI Orchestration Layer", short: "Orchestration", color: "#7B68EE" },
   { id: "ads", name: "AI Advertising Agent", short: "Advertising", color: "#4573D2" },
@@ -93,7 +125,6 @@ export const tagStyle = (tag: string) => {
   return TAG_PALETTE[h % TAG_PALETTE.length];
 };
 
-export const systemOf = (id: SystemId) => SYSTEMS.find((s) => s.id === id) ?? SYSTEMS[0];
 export const statusOf = (id: Status) => STATUSES.find((s) => s.id === id) ?? STATUSES[0];
 export const phaseOf = (id: Phase) => PHASES.find((p) => p.id === id) ?? PHASES[0];
 export const priorityOf = (id: Priority) => PRIORITIES.find((p) => p.id === id) ?? PRIORITIES[0];

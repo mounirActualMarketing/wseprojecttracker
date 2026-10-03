@@ -1,24 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Avatar, ChecklistBadge, DueLabel, Empty, Loading, PriorityFlag, SystemTag, TagList } from "@/components/bits";
+import { Assignees, ChecklistBadge, DueLabel, Empty, Loading, PriorityFlag, SystemTag, TagList } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { fmtShort, todayISO } from "@/lib/dates";
-import { actions } from "@/lib/store";
-import { PHASES, PRIORITIES, STATUSES, SYSTEMS, statusOf, type Status, type Task } from "@/lib/types";
+import { actions, useStore, userOf } from "@/lib/store";
+import { PHASES, PRIORITIES, STATUSES, statusOf, type Status, type Task } from "@/lib/types";
 
-type SortKey = "title" | "owner" | "due" | "priority" | "status" | "system" | "start";
+type SortKey = "title" | "assignee" | "due" | "priority" | "status" | "system" | "start";
 type GroupBy = "status" | "system" | "none";
 
 const rank: Record<string, string[]> = {
-  system: SYSTEMS.map((s) => s.id),
   status: STATUSES.map((s) => s.id),
   priority: PRIORITIES.map((p) => p.id),
 };
 
 const COLS: { key: SortKey; label: string; w: string }[] = [
   { key: "title", label: "Name", w: "min-w-[320px]" },
-  { key: "owner", label: "Assignee", w: "w-28" },
+  { key: "assignee", label: "Assignees", w: "w-36" },
   { key: "start", label: "Start", w: "w-20" },
   { key: "due", label: "Due", w: "w-24" },
   { key: "priority", label: "Priority", w: "w-24" },
@@ -28,18 +27,25 @@ const COLS: { key: SortKey; label: string; w: string }[] = [
 
 export default function TableView() {
   const { tasks, hydrated } = useFilteredTasks();
+  const { systems } = useStore();
   const { openEdit, openNew } = useUI();
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "due", dir: 1 });
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const sorted = useMemo(() => {
-    const val = (t: Task) => (sort.key in rank ? rank[sort.key].indexOf(t[sort.key] as string) : String(t[sort.key]).toLowerCase());
+    const val = (t: Task): number | string => {
+      const k = sort.key;
+      if (k === "system") return systems.findIndex((s) => s.id === t.system);
+      if (k === "assignee") return (userOf(t.assignees[0] ?? "")?.name ?? "~").toLowerCase();
+      if (k in rank) return rank[k].indexOf(t[k as "status" | "priority"]);
+      return String(t[k as "title" | "due" | "start"]).toLowerCase();
+    };
     return [...tasks].sort((a, b) => {
       const va = val(a), vb = val(b);
       return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir;
     });
-  }, [tasks, sort]);
+  }, [tasks, sort, systems]);
 
   if (!hydrated) return <Loading />;
   const today = todayISO();
@@ -48,7 +54,7 @@ export default function TableView() {
     groupBy === "status"
       ? STATUSES.map((s) => ({ id: s.id, label: s.label, color: s.color, tasks: sorted.filter((t) => t.status === s.id), defaults: { status: s.id } }))
       : groupBy === "system"
-        ? SYSTEMS.map((s) => ({ id: s.id, label: s.name, color: s.color, tasks: sorted.filter((t) => t.system === s.id), defaults: { system: s.id } }))
+        ? systems.map((s) => ({ id: s.id, label: s.name, color: s.color, tasks: sorted.filter((t) => t.system === s.id), defaults: { system: s.id } }))
         : [{ id: "all", label: "All tasks", color: "#7B68EE", tasks: sorted, defaults: {} }];
 
   return (
@@ -155,8 +161,8 @@ function Row({ t, today, onOpen }: { t: Task; today: string; onOpen: () => void 
       </td>
       <td className="px-3 py-2">
         <span className="flex items-center gap-2">
-          <Avatar name={t.owner} />
-          <span className="truncate text-xs text-muted">{t.owner}</span>
+          <Assignees task={t} />
+          {t.assignees.length === 1 ? <span className="truncate text-xs text-muted">{userOf(t.assignees[0])?.name}</span> : null}
         </span>
       </td>
       <td className="px-3 py-2 text-xs text-muted">{fmtShort(t.start)}</td>

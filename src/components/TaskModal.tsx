@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { actions, newId, useStore } from "@/lib/store";
+import { Avatar } from "./bits";
+import { actions, can, newId, useStore } from "@/lib/store";
 import { shiftISO, todayISO } from "@/lib/dates";
-import { PHASES, PRIORITIES, STATUSES, SYSTEMS, statusOf, tagStyle, type Task } from "@/lib/types";
+import { PHASES, PRIORITIES, STATUSES, statusOf, tagStyle, type Task } from "@/lib/types";
 import { useUI } from "./ui-context";
 
 type Draft = Omit<Task, "id">;
@@ -17,7 +18,8 @@ const blank = (): Draft => {
     status: "todo",
     phase: "discovery",
     priority: "medium",
-    owner: "CSM",
+    team: null,
+    assignees: [],
     start: today,
     due: shiftISO(today, 7),
     dependsOn: [],
@@ -34,7 +36,8 @@ export function TaskModal() {
 }
 
 function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defaults?: Partial<Task>; onClose: () => void }) {
-  const { tasks } = useStore();
+  const { tasks, systems, users, teams, me } = useStore();
+  const readOnly = !can(me, "member");
   const existing = taskId ? tasks.find((t) => t.id === taskId) : undefined;
   const [form, setForm] = useState<Draft>(() => {
     if (existing) {
@@ -42,7 +45,7 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
       void _id;
       return rest;
     }
-    const b = { ...blank(), ...defaults };
+    const b = { ...blank(), system: systems[0]?.id ?? "", team: me?.team ?? null, ...defaults };
     if (b.due < b.start) b.start = b.due;
     return b;
   });
@@ -57,10 +60,10 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
   }, [onClose]);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const owners = Array.from(new Set(tasks.map((t) => t.owner).filter(Boolean)));
+  const people = users.filter((u) => u.active || form.assignees.includes(u.id));
   const allTags = Array.from(new Set(tasks.flatMap((t) => t.tags)));
   const others = tasks.filter((t) => t.id !== taskId);
-  const valid = form.title.trim().length > 0 && form.start <= form.due;
+  const valid = !readOnly && form.title.trim().length > 0 && form.start <= form.due && !!form.system;
   const doneCount = form.checklist.filter((c) => c.done).length;
 
   const save = () => {
@@ -85,7 +88,7 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
 
   const field =
     "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15";
-  const row = "grid grid-cols-[110px_1fr] items-center gap-3";
+  const row = "grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3";
   const lbl = "text-xs font-medium text-muted";
   const st = statusOf(form.status);
 
@@ -101,6 +104,7 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
         <div className="flex items-center justify-between border-b border-line px-6 py-3">
           <div className="flex items-center gap-2">
             <select
+              disabled={readOnly}
               value={form.status}
               onChange={(e) => set("status", e.target.value as Task["status"])}
               className="rounded-md border-0 px-2 py-1 text-xs font-semibold uppercase tracking-wide outline-none"
@@ -115,6 +119,7 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
             </select>
             <button
               type="button"
+              disabled={readOnly}
               onClick={() => set("status", form.status === "done" ? "todo" : "done")}
               className={`rounded-md border px-2 py-1 text-xs font-medium ${form.status === "done" ? "border-[#10B981] bg-[#E6F8F1] text-[#047857]" : "border-line text-muted hover:border-line-strong hover:text-ink"}`}
             >
@@ -134,8 +139,10 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
             e.preventDefault();
             save();
           }}
-          className="flex-1 space-y-6 overflow-y-auto px-6 py-5"
+          className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-5"
         >
+          <fieldset disabled={readOnly} className="min-w-0 space-y-6">
+          {readOnly ? <p className="rounded-lg bg-subtle px-3 py-2 text-xs text-muted">Your account is view only.</p> : null}
           <input
             autoFocus={!existing}
             value={form.title}
@@ -146,17 +153,40 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
           />
 
           <div className="space-y-2.5">
+            <div className="grid grid-cols-[110px_minmax(0,1fr)] items-start gap-3">
+              <span className={`${lbl} pt-1.5`}>Assignees</span>
+              <div className="flex flex-wrap gap-1.5">
+                {people.length === 0 ? <span className="pt-1 text-xs text-faint">Invite people on the Team page first.</span> : null}
+                {people.map((u) => {
+                  const on = form.assignees.includes(u.id);
+                  return (
+                    <button
+                      type="button"
+                      key={u.id}
+                      onClick={() => set("assignees", on ? form.assignees.filter((x) => x !== u.id) : [...form.assignees, u.id])}
+                      className={`flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2.5 text-xs ${on ? "border-brand bg-brand-soft text-ink" : "border-line text-muted hover:border-line-strong"}`}
+                      aria-pressed={on}
+                    >
+                      <Avatar name={u.name} size={20} />
+                      {u.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className={row}>
-              <label className={lbl} htmlFor="owner">Assignee</label>
-              <input id="owner" list="owners" className={field} value={form.owner} onChange={(e) => set("owner", e.target.value)} />
-              <datalist id="owners">{owners.map((o) => <option key={o} value={o} />)}</datalist>
+              <label className={lbl} htmlFor="team">Team</label>
+              <select id="team" className={field} value={form.team ?? ""} onChange={(e) => set("team", e.target.value || null)}>
+                <option value="">No team</option>
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
             </div>
             <div className={row}>
               <span className={lbl}>Dates</span>
-              <div className="flex items-center gap-2">
-                <input aria-label="Start date" type="date" className={field} value={form.start} onChange={(e) => e.target.value && set("start", e.target.value)} />
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <input aria-label="Start date" type="date" className={`${field} min-w-[140px] flex-1`} value={form.start} onChange={(e) => e.target.value && set("start", e.target.value)} />
                 <span className="text-faint">→</span>
-                <input aria-label="Due date" type="date" className={field} value={form.due} onChange={(e) => e.target.value && set("due", e.target.value)} />
+                <input aria-label="Due date" type="date" className={`${field} min-w-[140px] flex-1`} value={form.due} onChange={(e) => e.target.value && set("due", e.target.value)} />
               </div>
             </div>
             {form.start > form.due ? <p className="pl-[122px] text-xs text-[#D93F45]">Due date is before the start date.</p> : null}
@@ -179,7 +209,7 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
             <div className={row}>
               <label className={lbl} htmlFor="system">System</label>
               <select id="system" className={field} value={form.system} onChange={(e) => set("system", e.target.value as Task["system"])}>
-                {SYSTEMS.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div className={row}>
@@ -310,11 +340,12 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
               </div>
             )}
           </section>
+          </fieldset>
         </form>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-6 py-3">
           <div>
-            {existing ? (
+            {existing && !readOnly ? (
               confirmDelete ? (
                 <span className="flex items-center gap-2 text-sm">
                   <span className="text-muted">Delete this task?</span>

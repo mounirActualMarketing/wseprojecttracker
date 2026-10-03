@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Avatar, ChecklistBadge, DueLabel, isOverdue, Loading, PriorityFlag, SystemTag, TagList } from "@/components/bits";
+import { Assignees, ChecklistBadge, DueLabel, isOverdue, Loading, PriorityFlag, SystemTag, TagList } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { todayISO } from "@/lib/dates";
 import { actions } from "@/lib/store";
@@ -82,7 +82,7 @@ export default function KanbanView() {
                       {t.tags.length ? <div className="mt-2"><TagList tags={t.tags} max={2} /></div> : null}
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <span className="flex items-center gap-2">
-                          <Avatar name={t.owner} size={20} />
+                          <Assignees task={t} size={20} />
                           <DueLabel task={t} today={today} />
                         </span>
                         <span className="flex items-center gap-2">

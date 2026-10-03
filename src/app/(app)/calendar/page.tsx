@@ -4,8 +4,8 @@ import { useState } from "react";
 import { isOverdue, Loading } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { addDays, diffDays, startOfWeek, toDate, todayISO, toISO } from "@/lib/dates";
-import { actions } from "@/lib/store";
-import { statusOf, systemOf, type Task } from "@/lib/types";
+import { actions, systemOf } from "@/lib/store";
+import { statusOf, type Task } from "@/lib/types";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 

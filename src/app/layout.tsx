@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { Shell } from "@/components/Shell";
 import "./globals.css";
 
 const inter = Inter({
@@ -18,7 +17,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full font-sans text-[14px]">
-        <Shell>{children}</Shell>
+        {children}
       </body>
     </html>
   );

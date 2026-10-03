@@ -7,7 +7,8 @@ import type { SystemId, Task } from "@/lib/types";
 interface Filters {
   query: string;
   system: SystemId | "all";
-  owner: string; // "" = all
+  assignee: string; // "" = all, "none" = unassigned, or a user id
+  team: string; // "" = all, or a team id
   tag: string; // "" = all
 }
 
@@ -29,7 +30,7 @@ interface UI {
 const Ctx = createContext<UI | null>(null);
 
 export function UIProvider({ children }: { children: React.ReactNode }) {
-  const [filters, setF] = useState<Filters>({ query: "", system: "all", owner: "", tag: "" });
+  const [filters, setF] = useState<Filters>({ query: "", system: "all", assignee: "", team: "", tag: "" });
   const [modal, setModal] = useState<ModalState>({ open: false, taskId: null });
 
   const setFilters = useCallback((f: Partial<Filters>) => setF((p) => ({ ...p, ...f })), []);
@@ -50,7 +51,7 @@ export function useUI() {
   return v;
 }
 
-/** Tasks after the global search / system / owner / tag filters. */
+/** Tasks after the global search / system / assignee / team / tag filters. */
 export function useFilteredTasks() {
   const { tasks, hydrated } = useStore();
   const { filters } = useUI();
@@ -59,12 +60,12 @@ export function useFilteredTasks() {
     return tasks.filter(
       (t) =>
         (filters.system === "all" || t.system === filters.system) &&
-        (!filters.owner || t.owner === filters.owner) &&
+        (!filters.assignee || (filters.assignee === "none" ? !t.assignees.length : t.assignees.includes(filters.assignee))) &&
+        (!filters.team || t.team === filters.team) &&
         (!filters.tag || t.tags.includes(filters.tag)) &&
         (!q ||
           t.title.toLowerCase().includes(q) ||
           t.notes.toLowerCase().includes(q) ||
-          t.owner.toLowerCase().includes(q) ||
           t.checklist.some((c) => c.text.toLowerCase().includes(q))),
     );
   }, [tasks, filters]);
