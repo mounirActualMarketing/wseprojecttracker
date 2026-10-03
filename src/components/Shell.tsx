@@ -36,11 +36,30 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="min-w-0 flex-1 px-4 pb-10 pt-5 md:px-8">{children}</main>
+          <main className="min-w-0 flex-1 px-4 pb-10 pt-5 md:px-8">
+            <SyncError />
+            {children}
+          </main>
         </div>
       </div>
       <TaskModal />
     </UIProvider>
+  );
+}
+
+function SyncError() {
+  const { error } = useStore();
+  if (!error) return null;
+  return (
+    <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#F5B5B7] bg-[#FDECEC] px-4 py-2.5 text-sm text-[#C2343A]">
+      <span>{error}</span>
+      <span className="flex shrink-0 gap-3">
+        <button onClick={() => actions.reload()} className="font-medium hover:underline">Retry</button>
+        <button onClick={() => actions.dismissError()} className="text-[#C2343A]/70 hover:text-[#C2343A]" aria-label="Dismiss">
+          ✕
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -239,7 +258,7 @@ function DataMenu({ compact = false }: { compact?: boolean }) {
           {confirm ? (
             <div className="p-2 text-sm">
               <p className="mb-3 text-ink">
-                {confirm === "clear" ? "Remove every task and start an empty plan?" : "Replace the current tasks with the starting plan?"}
+                {confirm === "clear" ? "Remove every task for everyone and start an empty plan?" : "Replace everyone\u2019s plan with the starting plan?"}
               </p>
               <div className="flex gap-2">
                 <button

@@ -4,84 +4,79 @@ import { useSyncExternalStore } from "react";
 import { starterTasks } from "./seed";
 import type { Task } from "./types";
 
-// Single client-side task store shared by every view, persisted to localStorage.
-// Swap this module for an API/database later; the views only use the hook + actions.
-
-const KEY = "wse-strategy-system:v2";
+// Client-side task store shared by every view, backed by the Neon database through /api/tasks.
+// Changes apply to the screen immediately, then save to the server; on failure the plan is reloaded
+// from the server and an error is shown. The plan is refreshed on focus and every 20 seconds.
 
 interface State {
   tasks: Task[];
   hydrated: boolean;
+  error: string | null;
 }
 
-const SERVER_STATE: State = { tasks: [], hydrated: false };
+const SERVER_STATE: State = { tasks: [], hydrated: false, error: null };
+const REFRESH_MS = 20_000;
 
-let state: State | null = null;
+let state: State = SERVER_STATE;
+let started = false;
+let pending = 0; // saves in flight; background refreshes wait for them
 const listeners = new Set<() => void>();
 
-// Bump when starter tasks are added, and list them so saved plans pick them up once.
-const SEED_VERSION = 2;
-const SEED_ADDITIONS: Record<number, string[]> = { 2: ["r00"] };
-
-const normalize = (t: Partial<Task>): Task =>
-  ({ notes: "", dependsOn: [], tags: [], checklist: [], ...t }) as Task;
-
-function load(): State {
-  if (state) return state;
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { tasks: Partial<Task>[]; seed?: number };
-      let tasks = (parsed.tasks ?? []).map(normalize);
-      const from = parsed.seed ?? 1;
-      if (from < SEED_VERSION) {
-        const ids = new Set(tasks.map((t) => t.id));
-        const added = Object.entries(SEED_ADDITIONS)
-          .filter(([v]) => Number(v) > from)
-          .flatMap(([, list]) => list);
-        const missing = starterTasks().filter((t) => added.includes(t.id) && !ids.has(t.id));
-        tasks = [...missing, ...tasks];
-        // persist quietly: load() runs during render, so listeners must not fire here
-        window.localStorage.setItem(KEY, JSON.stringify({ tasks, seed: SEED_VERSION }));
-      }
-      state = { tasks, hydrated: true };
-      return state;
-    }
-  } catch {
-    // storage blocked or corrupt: fall back to the starting plan
-  }
-  state = { tasks: starterTasks(), hydrated: true };
-  return state;
+function set(patch: Partial<State>) {
+  state = { ...state, ...patch };
+  listeners.forEach((l) => l());
 }
 
-function commit(tasks: Task[]) {
-  state = { tasks, hydrated: true };
+async function refresh() {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify({ tasks, seed: SEED_VERSION }));
-  } catch {
-    // ignore quota / privacy mode errors
+    const res = await fetch("/api/tasks", { cache: "no-store" });
+    if (!res.ok) throw new Error(`Could not load the plan (${res.status})`);
+    const tasks = (await res.json()) as Task[];
+    if (pending === 0) set({ tasks, hydrated: true, error: null });
+  } catch (e) {
+    set({ hydrated: true, error: e instanceof Error ? e.message : "Could not load the plan" });
   }
-  listeners.forEach((l) => l());
+}
+
+function start() {
+  if (started) return;
+  started = true;
+  refresh();
+  window.setInterval(() => document.visibilityState === "visible" && refresh(), REFRESH_MS);
+  window.addEventListener("focus", () => refresh());
 }
 
 function subscribe(l: () => void) {
   listeners.add(l);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === KEY) {
-      state = null;
-      l();
-    }
-  };
-  window.addEventListener("storage", onStorage);
-  return () => {
-    listeners.delete(l);
-    window.removeEventListener("storage", onStorage);
-  };
+  start();
+  return () => listeners.delete(l);
 }
 
 export function useStore(): State {
-  return useSyncExternalStore(subscribe, load, () => SERVER_STATE);
+  return useSyncExternalStore(subscribe, () => state, () => SERVER_STATE);
 }
+
+/** Apply a change locally right away, then send it to the server. */
+async function save(next: Task[], request: () => Promise<Response>) {
+  set({ tasks: next, error: null });
+  pending++;
+  try {
+    const res = await request();
+    if (!res.ok) throw new Error(`Save failed (${res.status})`);
+  } catch (e) {
+    set({ error: `${e instanceof Error ? e.message : "Save failed"}. The plan was reloaded from the server.` });
+    pending--;
+    await refresh();
+    return;
+  }
+  pending--;
+}
+
+const json = (method: string, body: unknown) => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
 
 export const newId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -91,26 +86,31 @@ export const newId = () =>
 export const actions = {
   add(task: Omit<Task, "id">): string {
     const id = newId();
-    commit([...load().tasks, { ...task, id }]);
+    const full = { ...task, id };
+    save([...state.tasks, full], () => fetch("/api/tasks", json("POST", full)));
     return id;
   },
   update(id: string, patch: Partial<Task>) {
-    commit(load().tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    save(
+      state.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+      () => fetch(`/api/tasks/${encodeURIComponent(id)}`, json("PATCH", patch)),
+    );
   },
   remove(id: string) {
-    commit(
-      load()
-        .tasks.filter((t) => t.id !== id)
+    save(
+      state.tasks
+        .filter((t) => t.id !== id)
         .map((t) => (t.dependsOn.includes(id) ? { ...t, dependsOn: t.dependsOn.filter((d) => d !== id) } : t)),
+      () => fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
     );
   },
   toggleCheck(taskId: string, itemId: string) {
-    const t = load().tasks.find((x) => x.id === taskId);
+    const t = state.tasks.find((x) => x.id === taskId);
     if (t) actions.update(taskId, { checklist: t.checklist.map((c) => (c.id === itemId ? { ...c, done: !c.done } : c)) });
   },
   addDependency(taskId: string, dependsOnId: string) {
     if (taskId === dependsOnId) return;
-    const byId = new Map(load().tasks.map((t) => [t.id, t]));
+    const byId = new Map(state.tasks.map((t) => [t.id, t]));
     // refuse edges that would create a cycle
     const reaches = (from: string, target: string, seen = new Set<string>()): boolean => {
       if (from === target) return true;
@@ -124,16 +124,23 @@ export const actions = {
     actions.update(taskId, { dependsOn: [...t.dependsOn, dependsOnId] });
   },
   removeDependency(taskId: string, dependsOnId: string) {
-    const t = load().tasks.find((x) => x.id === taskId);
+    const t = state.tasks.find((x) => x.id === taskId);
     if (t) actions.update(taskId, { dependsOn: t.dependsOn.filter((d) => d !== dependsOnId) });
   },
+  replaceAll(tasks: Task[]) {
+    save(tasks, () => fetch("/api/tasks", json("PUT", tasks)));
+  },
   resetPlan() {
-    commit(starterTasks());
+    actions.replaceAll(starterTasks());
   },
   clearAll() {
-    commit([]);
+    actions.replaceAll([]);
   },
   importTasks(tasks: Partial<Task>[]) {
-    commit(tasks.map(normalize));
+    actions.replaceAll(tasks.map((t) => ({ notes: "", dependsOn: [], tags: [], checklist: [], ...t }) as Task));
   },
+  dismissError() {
+    set({ error: null });
+  },
+  reload: refresh,
 };
