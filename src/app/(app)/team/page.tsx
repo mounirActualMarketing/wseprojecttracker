@@ -53,7 +53,10 @@ export default function TeamPage() {
     <div className="mx-auto max-w-6xl space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          {users.filter((u) => u.active).length} people in {teams.length} teams. {isAdmin ? "Invite people with a link you send them yourself." : null}
+          {(() => {
+            const n = users.filter((u) => u.active).length;
+            return `${n} ${n === 1 ? "person" : "people"} in ${teams.length} ${teams.length === 1 ? "team" : "teams"}.`;
+          })()} {isAdmin ? "Invite people with a link you send them yourself." : null}
         </p>
         {isAdmin ? (
           <div className="flex gap-2">
