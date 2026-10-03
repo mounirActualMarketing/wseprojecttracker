@@ -5,6 +5,7 @@ import { Assignees, Empty, isOverdue, Loading } from "@/components/bits";
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { addDays, diffDays, fmtShort, shiftISO, startOfWeek, toDate, todayISO, toISO } from "@/lib/dates";
 import { actions, useStore } from "@/lib/store";
+import { useIsMobile } from "@/lib/useIsMobile";
 import { statusOf, TERM_END, TERM_START, type Task } from "@/lib/types";
 
 const ZOOMS = [
@@ -14,7 +15,6 @@ const ZOOMS = [
 ] as const;
 
 const ROW_H = 40;
-const LEFT_W = 280;
 
 type Drag = { id: string; mode: "move" | "resize"; x0: number; delta: number; moved: boolean };
 
@@ -25,6 +25,9 @@ export default function PlannerView() {
   const [zoom, setZoom] = useState<(typeof ZOOMS)[number]["id"]>("week");
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
+  const isMobile = useIsMobile();
+  // phones: narrower name column, and bars open on tap so swiping the timeline never moves a task
+  const LEFT_W = isMobile ? 150 : 280;
   if (!hydrated) return <Loading />;
 
   const dayW = ZOOMS.find((z) => z.id === zoom)!.w;
@@ -103,7 +106,11 @@ export default function PlannerView() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-faint">Drag a bar to reschedule, drag its right edge to change the due date, click to open. The shaded band is the initial term.</p>
+        <p className="text-xs text-faint">
+          <span className="hidden md:inline">Drag a bar to reschedule, drag its right edge to change the due date, click to open. </span>
+          <span className="md:hidden">Swipe to scroll the timeline, tap a bar to change its dates. </span>
+          The shaded band is the initial term.
+        </p>
       </div>
 
       {groups.length === 0 ? (
@@ -150,7 +157,7 @@ export default function PlannerView() {
                   <div className="flex border-b border-line bg-[#FAFAFB]">
                     <div style={{ width: LEFT_W }} className="sticky left-0 z-10 flex shrink-0 items-center gap-2 border-r border-line bg-[#FAFAFB] px-4 py-1.5 text-xs font-semibold text-ink">
                       <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: g.system.color }} />
-                      {g.system.name}
+                      <span className="truncate">{g.system.name}</span>
                       <span className="font-normal text-faint">{g.tasks.length}</span>
                     </div>
                     <div style={{ width }} />
@@ -171,13 +178,14 @@ export default function PlannerView() {
                         >
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: st.color }} title={st.label} />
                           <span className={`min-w-0 flex-1 truncate ${done ? "text-faint line-through" : "text-ink"}`}>{t.title}</span>
-                          <Assignees task={t} size={18} max={2} />
+                          <span className="hidden md:inline-flex"><Assignees task={t} size={18} max={2} /></span>
                         </button>
                         <div className="relative" style={{ width }}>
                           <div
-                            onPointerDown={(e) => start(e, t, "move")}
-                            onPointerMove={move}
-                            onPointerUp={() => end(t)}
+                            onPointerDown={isMobile ? undefined : (e) => start(e, t, "move")}
+                            onPointerMove={isMobile ? undefined : move}
+                            onPointerUp={isMobile ? undefined : () => end(t)}
+                            onClick={isMobile ? () => openEdit(t.id) : undefined}
                             className={`absolute top-1/2 flex h-6 -translate-y-1/2 cursor-grab items-center overflow-hidden rounded-md text-[11px] font-medium text-white shadow-sm active:cursor-grabbing ${late ? "ring-2 ring-[#E5484D]/60" : ""} ${drag?.id === t.id ? "z-20 opacity-90 shadow-md" : ""}`}
                             style={{
                               left,
@@ -192,7 +200,9 @@ export default function PlannerView() {
                             title={`${t.title}\n${fmtShort(v.s)} to ${fmtShort(v.e)} · ${st.label}`}
                           >
                             <span className="truncate px-2">{w > 60 ? t.title : ""}</span>
-                            <span onPointerDown={(e) => start(e, t, "resize")} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10 hover:bg-black/25" />
+                            {isMobile ? null : (
+                              <span onPointerDown={(e) => start(e, t, "resize")} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-black/10 hover:bg-black/25" />
+                            )}
                           </div>
                           {w <= 60 ? (
                             <span className="pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] text-muted" style={{ left: left + w + 6 }}>

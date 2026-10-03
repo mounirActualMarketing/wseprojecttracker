@@ -59,7 +59,7 @@ export default function TeamPage() {
           })()} {isAdmin ? "Invite people with a link you send them yourself." : null}
         </p>
         {isAdmin ? (
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
             <button className={secondaryBtn} onClick={() => setDialog({ kind: "team" })}>Add team</button>
             <button className={primaryBtn} onClick={() => setDialog({ kind: "invite" })}>+ Invite member</button>
           </div>
@@ -82,7 +82,73 @@ export default function TeamPage() {
           {g.members.length === 0 ? (
             <p className="px-5 py-4 text-sm text-faint">No one in this team yet.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* phones: one card per person */}
+            <ul className="divide-y divide-line md:hidden">
+              {g.members.map((u) => {
+                const w = load(u);
+                const self = u.id === me?.id;
+                const sel = "w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm outline-none focus:border-brand";
+                return (
+                  <li key={u.id} className={`space-y-3 px-4 py-3.5 ${u.active ? "" : "opacity-50"}`}>
+                    <div className="flex items-center gap-3">
+                      <Avatar name={u.name} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5 font-medium text-ink">
+                          {u.name}
+                          {self ? <span className="rounded bg-brand-soft px-1.5 text-[10px] font-semibold text-brand-dark">You</span> : null}
+                          {!u.active ? <span className="rounded bg-subtle px-1.5 text-[10px] text-muted">Deactivated</span> : u.pending ? <span className="rounded bg-[#FEF4E2] px-1.5 text-[10px] font-medium text-[#9A5800]">Invite pending</span> : null}
+                        </div>
+                        <div className="truncate text-xs text-muted">{u.email}</div>
+                      </div>
+                      <button onClick={() => showTasks(u)} className="shrink-0 text-right">
+                        <div className="text-lg font-semibold leading-none tabular-nums text-ink">{w.open}</div>
+                        <div className={`text-[10px] ${w.overdue ? "font-medium text-[#D93F45]" : "text-muted"}`}>{w.overdue ? `${w.overdue} overdue` : "open"}</div>
+                      </button>
+                    </div>
+                    {isAdmin ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select className={sel} value={u.role} onChange={(e) => act(() => actions.updateUser(u.id, { role: e.target.value as Role }))} aria-label={`Role for ${u.name}`}>
+                            {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                          </select>
+                          <select className={sel} value={u.team ?? ""} onChange={(e) => act(() => actions.updateUser(u.id, { team: e.target.value || null }))} aria-label={`Team for ${u.name}`}>
+                            <option value="">No team</option>
+                            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                          </select>
+                        </div>
+                        {self ? null : (
+                          <div className="flex gap-2">
+                            {u.active ? (
+                              <>
+                                <button
+                                  className="flex-1 rounded-lg border border-line py-2 text-xs font-medium text-brand"
+                                  onClick={() => act(async () => setDialog({ kind: "link", user: u, token: await actions.newInviteLink(u.id), reset: !u.pending }))}
+                                >
+                                  {u.pending ? "Invite link" : "Reset password link"}
+                                </button>
+                                <button className="rounded-lg border border-line px-3 py-2 text-xs text-muted" onClick={() => act(() => actions.updateUser(u.id, { active: false }))}>
+                                  Deactivate
+                                </button>
+                              </>
+                            ) : (
+                              <button className="flex-1 rounded-lg border border-line py-2 text-xs font-medium text-brand" onClick={() => act(() => actions.updateUser(u.id, { active: true }))}>
+                                Reactivate
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-xs text-muted">
+                        {ROLES.find((r) => r.id === u.role)?.label} · {teams.find((t) => t.id === u.team)?.name ?? "No team"}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="bg-[#FAFAFB] text-left text-xs text-muted">
@@ -181,6 +247,7 @@ export default function TeamPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
       ))}

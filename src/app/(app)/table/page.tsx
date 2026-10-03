@@ -77,7 +77,31 @@ export default function TableView() {
       {tasks.length === 0 ? (
         <Empty onAdd={() => openNew()} />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <>
+        {/* phones: card list with the same groups */}
+        <div className="space-y-4 md:hidden">
+          {groups
+            .filter((g) => g.tasks.length)
+            .map((g) => (
+              <section key={g.id}>
+                <button onClick={() => setCollapsed((c) => ({ ...c, [g.id]: !c[g.id] }))} className="mb-2 flex items-center gap-2">
+                  <span className={`text-faint transition ${collapsed[g.id] ? "" : "rotate-90"}`}>▸</span>
+                  <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white" style={{ background: g.color }}>
+                    {g.label}
+                  </span>
+                  <span className="text-xs tabular-nums text-muted">{g.tasks.length}</span>
+                </button>
+                {collapsed[g.id] ? null : (
+                  <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+                    {g.tasks.map((t) => (
+                      <MobileRow key={t.id} t={t} today={today} onOpen={() => openEdit(t.id)} />
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ))}
+        </div>
+        <div className="hidden overflow-x-auto rounded-xl border border-line bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.04)] md:block">
           <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line bg-[#FAFAFB] text-left text-xs text-muted">
@@ -133,8 +157,35 @@ export default function TableView() {
               })}
           </table>
         </div>
+        </>
       )}
     </div>
+  );
+}
+
+function MobileRow({ t, today, onOpen }: { t: Task; today: string; onOpen: () => void }) {
+  const done = t.status === "done";
+  return (
+    <li className="flex gap-3 px-3 py-3 active:bg-subtle">
+      <input
+        type="checkbox"
+        checked={done}
+        onChange={() => actions.update(t.id, { status: done ? "todo" : "done" })}
+        className="mt-0.5 h-5 w-5 shrink-0 accent-[#10B981]"
+        aria-label={`Mark ${t.title} ${done ? "not done" : "done"}`}
+      />
+      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <span className={`block text-[15px] font-medium leading-snug ${done ? "text-faint line-through" : "text-ink"}`}>{t.title}</span>
+        <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <SystemTag id={t.system} compact />
+          <DueLabel task={t} today={today} />
+          <PriorityFlag id={t.priority} />
+          <ChecklistBadge task={t} />
+        </span>
+        {t.tags.length ? <span className="mt-1.5 block"><TagList tags={t.tags} /></span> : null}
+      </button>
+      <span className="shrink-0 pt-0.5"><Assignees task={t} size={24} max={2} /></span>
+    </li>
   );
 }
 

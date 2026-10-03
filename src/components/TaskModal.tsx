@@ -87,7 +87,7 @@ function TaskDrawer({ taskId, defaults, onClose }: { taskId: string | null; defa
   };
 
   const field =
-    "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15";
+    "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-base text-ink md:text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15";
   const row = "grid grid-cols-[110px_minmax(0,1fr)] items-center gap-3";
   const lbl = "text-xs font-medium text-muted";
   const st = statusOf(form.status);

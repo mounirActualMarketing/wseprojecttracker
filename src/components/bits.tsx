@@ -90,7 +90,7 @@ export function Assignees({ task, size = 22, max = 3 }: { task: Task; size?: num
     const team = teamOf(task.team);
     return team ? (
       <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: team.color }} title={`${team.name} (no one assigned yet)`}>
-        {team.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase()}
+        {/^[a-z]{2,4}$/.test(team.id) ? team.id.toUpperCase() : team.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase()}
       </span>
     ) : (
       <span className="inline-flex items-center justify-center rounded-full border border-dashed border-line-strong text-faint" style={{ width: size, height: size, fontSize: size * 0.5 }} title="Unassigned">

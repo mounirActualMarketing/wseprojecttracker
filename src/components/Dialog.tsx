@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { PALETTE } from "@/lib/types";
 
 /** Small centred dialog used for systems, teams, invites and passwords. */
@@ -11,7 +12,8 @@ export function Dialog({ title, onClose, children, width = "max-w-md" }: { title
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // rendered on <body> so a blurred or sticky parent never traps the overlay
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0f172a]/30 p-4" onMouseDown={onClose}>
       <div role="dialog" aria-modal="true" aria-label={title} className={`w-full ${width} rounded-xl bg-surface shadow-2xl`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
@@ -24,12 +26,13 @@ export function Dialog({ title, onClose, children, width = "max-w-md" }: { title
         </div>
         <div className="px-5 py-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 export const inputCls =
-  "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none transition placeholder:text-faint focus:border-brand focus:ring-2 focus:ring-brand/15";
+  "w-full rounded-lg border border-line bg-surface px-3 py-2 text-base text-ink md:text-sm outline-none transition placeholder:text-faint focus:border-brand focus:ring-2 focus:ring-brand/15";
 export const labelCls = "mb-1 block text-xs font-medium text-muted";
 export const primaryBtn = "rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-40";
 export const secondaryBtn = "rounded-lg border border-line px-4 py-2 text-sm text-ink hover:bg-subtle";

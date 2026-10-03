@@ -24,7 +24,8 @@ export default function KanbanView() {
   };
 
   return (
-    <div className="-mx-4 overflow-x-auto px-4 pb-2 md:-mx-8 md:px-8">
+    <div className="-mx-4 snap-x snap-mandatory overflow-x-auto scroll-px-4 px-4 pb-2 md:-mx-8 md:snap-none md:px-8">
+      <p className="mb-2 text-xs text-faint md:hidden">Swipe between columns. Tap a card to change its status.</p>
       <div className="flex min-w-max gap-3">
         {STATUSES.map((col) => {
           const list = tasks
@@ -41,7 +42,7 @@ export default function KanbanView() {
                 if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(null);
               }}
               onDrop={() => drop(col.id)}
-              className={`flex min-h-[65vh] w-[280px] flex-col rounded-xl transition ${over === col.id ? "bg-brand-soft ring-2 ring-brand/30" : "bg-[#F0F1F4]"}`}
+              className={`flex min-h-[60vh] w-[85vw] max-w-[320px] snap-start flex-col rounded-xl transition md:w-[280px] ${over === col.id ? "bg-brand-soft ring-2 ring-brand/30" : "bg-[#F0F1F4]"}`}
             >
               <header className="flex items-center justify-between px-3 pb-2 pt-3">
                 <span className="flex items-center gap-2">

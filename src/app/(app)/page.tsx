@@ -116,7 +116,7 @@ export default function Overview() {
         )}
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-3 [&>*]:min-w-0">
         <section className={`${card} p-5 lg:col-span-2`}>
           <h2 className="mb-3 text-sm font-semibold text-ink">Status</h2>
           <div className="flex h-2.5 overflow-hidden rounded-full bg-subtle">

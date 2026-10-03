@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { actions, can, systemOf, useStore } from "@/lib/store";
 import { ROLES, type System, type Task } from "@/lib/types";
 import { Avatar } from "./bits";
@@ -58,12 +59,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="min-w-0 flex-1 px-4 pb-10 pt-5 md:px-8">
+          <MobileTopBar />
+          <main className="min-w-0 flex-1 px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-5">
             <SyncError />
             {children}
           </main>
         </div>
       </div>
+      <MobileNav />
       <TaskModal />
     </UIProvider>
   );
@@ -163,30 +166,21 @@ function Sidebar() {
 function TopBar() {
   const path = usePathname();
   const { filters, setFilters, openNew } = useUI();
-  const { tasks, users, teams, systems, me } = useStore();
+  const { tasks, users, teams, me } = useStore();
   const tags = Array.from(new Set(tasks.flatMap((t) => t.tags))).sort();
   const title = filters.system === "all" ? "All systems" : systemOf(filters.system).name;
   const select = "rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none hover:border-line-strong focus:border-brand";
   const filtered = filters.query || filters.assignee || filters.team || filters.tag || filters.system !== "all";
-  const [addingSystem, setAddingSystem] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-surface">
-      <BrandStrip className="h-1 md:hidden" />
+    <header className="sticky top-0 z-30 hidden border-b border-line bg-surface md:block">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pt-4 md:px-8">
-        <div className="w-full md:hidden">
-          <PartnerLockup height={26} />
-        </div>
         <div className="mr-auto min-w-0">
           <div className="text-xs text-muted">Wall Street English × Clicksalesmedia / Strategy System</div>
           <h1 className="flex items-center gap-2 truncate text-xl font-semibold text-ink">
             {filters.system !== "all" ? <span className="h-3 w-3 rounded" style={{ background: systemOf(filters.system).color }} /> : null}
             {path.startsWith("/team") ? "Team" : title}
           </h1>
-        </div>
-        <div className="flex items-center gap-2 md:hidden">
-          {can(me, "admin") ? <DataMenu compact /> : null}
-          <AccountMenu compact />
         </div>
       </div>
 
@@ -224,15 +218,6 @@ function TopBar() {
               className="w-full rounded-lg border border-line bg-surface py-1.5 pl-8 pr-3 text-sm outline-none placeholder:text-faint hover:border-line-strong focus:border-brand"
             />
           </div>
-          <select value={filters.system} onChange={(e) => setFilters({ system: e.target.value })} className={`${select} md:hidden`} aria-label="Filter by system">
-            <option value="all">All systems</option>
-            {systems.map((s) => <option key={s.id} value={s.id}>{s.short}</option>)}
-          </select>
-          {can(me, "member") ? (
-            <button onClick={() => setAddingSystem(true)} className={`${select} text-muted md:hidden`}>
-              + System
-            </button>
-          ) : null}
           <select value={filters.assignee} onChange={(e) => setFilters({ assignee: e.target.value })} className={select} aria-label="Filter by assignee">
             <option value="">All assignees</option>
             {me ? <option value={me.id}>Assigned to me</option> : null}
@@ -264,7 +249,6 @@ function TopBar() {
           )}
         </div>
       )}
-      {addingSystem ? <SystemDialog onClose={() => setAddingSystem(false)} onCreated={(s) => setFilters({ system: s.id })} /> : null}
     </header>
   );
 }
@@ -377,15 +361,11 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DataMenu({ compact = false }: { compact?: boolean }) {
+/** Admin plan actions, shown in the sidebar dropdown on desktop and in the More sheet on phones. */
+function DataActions({ onDone }: { onDone: () => void }) {
   const { tasks } = useStore();
-  const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "clear" | "reset">(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const ref = useDismiss(open, () => {
-    setOpen(false);
-    setConfirm(null);
-  });
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(tasks, null, 2)], { type: "application/json" });
@@ -394,7 +374,7 @@ function DataMenu({ compact = false }: { compact?: boolean }) {
     a.download = `wse-plan-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    setOpen(false);
+    onDone();
   };
 
   const importJson = async (file: File) => {
@@ -406,68 +386,322 @@ function DataMenu({ compact = false }: { compact?: boolean }) {
     }
   };
 
-  const item = "w-full rounded-md px-3 py-2 text-left text-sm text-ink hover:bg-subtle";
+  const item = "w-full rounded-md px-3 py-2.5 text-left text-sm text-ink hover:bg-subtle md:py-2";
 
   return (
-    <div ref={ref} className={compact ? "relative" : "relative border-t border-line px-3 pt-3"}>
+    <>
+      {confirm ? (
+        <div className="p-2 text-sm">
+          <p className="mb-3 text-ink">
+            {confirm === "clear" ? "Remove every task for everyone and start an empty plan?" : "Replace everyone\u2019s plan with the starting plan?"}
+          </p>
+          <div className="flex gap-2">
+            <button
+              className="rounded-md bg-[#E5484D] px-3 py-1.5 text-white"
+              onClick={() => {
+                if (confirm === "clear") actions.clearAll();
+                else actions.resetPlan();
+                setConfirm(null);
+                onDone();
+              }}
+            >
+              Confirm
+            </button>
+            <button className="px-2 text-muted hover:text-ink" onClick={() => setConfirm(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button className={item} onClick={exportJson}>Export JSON</button>
+          <button className={item} onClick={() => fileRef.current?.click()}>Import JSON</button>
+          <div className="my-1 border-t border-line" />
+          <button className={item} onClick={() => setConfirm("reset")}>Reset to starting plan</button>
+          <button className={`${item} text-[#D93F45]`} onClick={() => setConfirm("clear")}>Clear all tasks</button>
+        </>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) importJson(f);
+          e.target.value = "";
+          onDone();
+        }}
+      />
+    </>
+  );
+}
+
+function DataMenu() {
+  const { tasks } = useStore();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  return (
+    <div ref={ref} className="relative border-t border-line px-3 pt-3">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={
-          compact
-            ? "rounded-lg border border-line px-2.5 py-1.5 text-sm text-ink"
-            : "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted hover:bg-subtle hover:text-ink"
-        }
+        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted hover:bg-subtle hover:text-ink"
       >
-        <span>{compact ? "Data" : `${tasks.length} tasks · Data`}</span>
-        {compact ? null : <span className="text-faint">⋯</span>}
+        <span>{tasks.length} tasks · Data</span>
+        <span className="text-faint">⋯</span>
       </button>
       {open ? (
-        <div className={`absolute z-40 w-60 rounded-xl border border-line bg-surface p-1.5 shadow-xl ${compact ? "right-0 top-full mt-2" : "bottom-full left-3 mb-2"}`}>
-          {confirm ? (
-            <div className="p-2 text-sm">
-              <p className="mb-3 text-ink">
-                {confirm === "clear" ? "Remove every task for everyone and start an empty plan?" : "Replace everyone’s plan with the starting plan?"}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  className="rounded-md bg-[#E5484D] px-3 py-1 text-white"
-                  onClick={() => {
-                    if (confirm === "clear") actions.clearAll();
-                    else actions.resetPlan();
-                    setConfirm(null);
-                    setOpen(false);
-                  }}
-                >
-                  Confirm
-                </button>
-                <button className="px-2 text-muted hover:text-ink" onClick={() => setConfirm(null)}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <button className={item} onClick={exportJson}>Export JSON</button>
-              <button className={item} onClick={() => fileRef.current?.click()}>Import JSON</button>
-              <div className="my-1 border-t border-line" />
-              <button className={item} onClick={() => setConfirm("reset")}>Reset to starting plan</button>
-              <button className={`${item} text-[#D93F45]`} onClick={() => setConfirm("clear")}>Clear all tasks</button>
-            </>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/json"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) importJson(f);
-              e.target.value = "";
-              setOpen(false);
-            }}
-          />
+        <div className="absolute bottom-full left-3 z-40 mb-2 w-60 rounded-xl border border-line bg-surface p-1.5 shadow-xl">
+          <DataActions onDone={() => setOpen(false)} />
         </div>
       ) : null}
     </div>
+  );
+}
+
+/* ---------------- phone chrome ---------------- */
+
+const MOBILE_TABS = ["/", "/table", "/kanban", "/calendar"];
+const MORE_ICON = "M5 12h.01M12 12h.01M19 12h.01";
+const FILTER_ICON = "M4 6h16M7 12h10M10 18h4";
+
+/** Bottom sheet for phones: slides up from the bottom edge. */
+function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // rendered on <body>: the phone top bar uses backdrop-blur, which would trap a fixed overlay inside it
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-end bg-[#0f172a]/30 md:hidden" onMouseDown={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl bg-surface px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-2 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" />
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-ink">{title}</h2>
+          <button onClick={onClose} className="rounded-md px-2 py-1 text-sm font-medium text-brand">Done</button>
+        </div>
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function activeFilterCount(f: { query: string; system: string; assignee: string; team: string; tag: string }) {
+  return [f.query, f.system !== "all" ? f.system : "", f.assignee, f.team, f.tag].filter(Boolean).length;
+}
+
+function MobileTopBar() {
+  const path = usePathname();
+  const { filters } = useUI();
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const view = VIEWS.find((v) => isActive(path, v.href));
+  const onTeam = path.startsWith("/team");
+  const title = onTeam ? "Team" : filters.system === "all" ? "All systems" : systemOf(filters.system).name;
+  const count = activeFilterCount(filters);
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur md:hidden">
+      <BrandStrip />
+      <div className="flex items-center gap-2 px-4 pb-2.5 pt-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+            <PartnerLockup height={24} />
+            <span className="ml-1 truncate">{onTeam ? "Workspace" : view?.label}</span>
+          </div>
+          <h1 className="mt-1 flex items-center gap-2 truncate text-lg font-semibold leading-tight text-ink">
+            {!onTeam && filters.system !== "all" ? <span className="h-2.5 w-2.5 shrink-0 rounded" style={{ background: systemOf(filters.system).color }} /> : null}
+            <span className="truncate">{title}</span>
+          </h1>
+        </div>
+        {onTeam ? null : (
+          <button
+            onClick={() => setFiltersOpen(true)}
+            className={`relative flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-sm ${count ? "border-brand bg-brand-soft text-brand-dark" : "border-line text-ink"}`}
+            aria-label="Filters"
+          >
+            <Icon d={FILTER_ICON} />
+            {count ? <span className="tabular-nums">{count}</span> : null}
+          </button>
+        )}
+        <AccountMenu compact />
+      </div>
+      {filtersOpen ? <FilterSheet onClose={() => setFiltersOpen(false)} /> : null}
+    </header>
+  );
+}
+
+function FilterSheet({ onClose }: { onClose: () => void }) {
+  const { filters, setFilters } = useUI();
+  const { tasks, users, teams, systems, me } = useStore();
+  const [addingSystem, setAddingSystem] = useState(false);
+  const tags = Array.from(new Set(tasks.flatMap((t) => t.tags))).sort();
+  const field = "w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-base text-ink outline-none focus:border-brand";
+  const label = "mb-1 block text-xs font-medium text-muted";
+
+  return (
+    <Sheet title="Filters" onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className={label} htmlFor="m-search">Search</label>
+          <input id="m-search" value={filters.query} onChange={(e) => setFilters({ query: e.target.value })} placeholder="Search tasks" className={field} />
+        </div>
+        <div>
+          <label className={label} htmlFor="m-system">System</label>
+          <div className="flex gap-2">
+            <select id="m-system" value={filters.system} onChange={(e) => setFilters({ system: e.target.value })} className={field}>
+              <option value="all">All systems</option>
+              {systems.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            {can(me, "member") ? (
+              <button onClick={() => setAddingSystem(true)} className="shrink-0 rounded-lg border border-line px-3 text-sm text-muted">
+                + New
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div>
+          <label className={label} htmlFor="m-assignee">Assignee</label>
+          <select id="m-assignee" value={filters.assignee} onChange={(e) => setFilters({ assignee: e.target.value })} className={field}>
+            <option value="">All assignees</option>
+            {me ? <option value={me.id}>Assigned to me</option> : null}
+            <option value="none">Unassigned</option>
+            {users.filter((u) => u.active && u.id !== me?.id).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className={label} htmlFor="m-team">Team</label>
+            <select id="m-team" value={filters.team} onChange={(e) => setFilters({ team: e.target.value })} className={field}>
+              <option value="">All teams</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={label} htmlFor="m-tag">Tag</label>
+            <select id="m-tag" value={filters.tag} onChange={(e) => setFilters({ tag: e.target.value })} className={field}>
+              <option value="">All tags</option>
+              {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        {activeFilterCount(filters) ? (
+          <button onClick={() => setFilters({ query: "", assignee: "", team: "", tag: "", system: "all" })} className="w-full rounded-lg border border-line py-2.5 text-sm text-ink">
+            Clear all filters
+          </button>
+        ) : null}
+      </div>
+      {addingSystem ? (
+        <SystemDialog
+          onClose={() => setAddingSystem(false)}
+          onCreated={(s) => {
+            setFilters({ system: s.id });
+            onClose();
+          }}
+        />
+      ) : null}
+    </Sheet>
+  );
+}
+
+function MobileNav() {
+  const path = usePathname();
+  const { me } = useStore();
+  const { openNew, filters } = useUI();
+  const [more, setMore] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
+  const [addingSystem, setAddingSystem] = useState(false);
+  const { setFilters } = useUI();
+  const tabs = VIEWS.filter((v) => MOBILE_TABS.includes(v.href));
+  const moreViews = VIEWS.filter((v) => !MOBILE_TABS.includes(v.href));
+  const moreActive = moreViews.some((v) => isActive(path, v.href));
+
+  return (
+    <>
+      {can(me, "member") && !path.startsWith("/team") ? (
+        <button
+          onClick={() => openNew(filters.system !== "all" ? { system: filters.system } : undefined)}
+          className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand text-3xl font-light leading-none text-white shadow-lg shadow-brand/30 active:scale-95 md:hidden"
+          style={{ bottom: "calc(env(safe-area-inset-bottom) + 76px)" }}
+          aria-label="Add task"
+        >
+          +
+        </button>
+      ) : null}
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        aria-label="Views"
+      >
+        {tabs.map((v) => {
+          const on = isActive(path, v.href);
+          return (
+            <Link key={v.href} href={v.href} className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${on ? "font-semibold text-brand" : "text-muted"}`}>
+              <Icon d={v.icon} size={20} />
+              {v.label}
+            </Link>
+          );
+        })}
+        <button onClick={() => setMore(true)} className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${moreActive ? "font-semibold text-brand" : "text-muted"}`}>
+          <Icon d={MORE_ICON} size={20} />
+          More
+        </button>
+      </nav>
+
+      {more ? (
+        <Sheet title="More" onClose={() => { setMore(false); setDataOpen(false); }}>
+          <div className="grid grid-cols-2 gap-2">
+            {moreViews.map((v) => {
+              const on = isActive(path, v.href);
+              return (
+                <Link
+                  key={v.href}
+                  href={v.href}
+                  onClick={() => setMore(false)}
+                  className={`flex items-center gap-2.5 rounded-xl border px-3 py-3 text-sm ${on ? "border-brand bg-brand-soft font-medium text-brand-dark" : "border-line text-ink"}`}
+                >
+                  <Icon d={v.icon} size={18} />
+                  {v.label}
+                </Link>
+              );
+            })}
+          </div>
+          {can(me, "member") ? (
+            <button onClick={() => setAddingSystem(true)} className="mt-3 w-full rounded-xl border border-dashed border-line-strong py-3 text-sm text-muted">
+              + Add a system
+            </button>
+          ) : null}
+          {can(me, "admin") ? (
+            <div className="mt-4">
+              <button onClick={() => setDataOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl bg-subtle px-3 py-3 text-sm text-ink">
+                Plan data (admin)
+                <span className="text-faint">{dataOpen ? "▾" : "▸"}</span>
+              </button>
+              {dataOpen ? (
+                <div className="mt-1">
+                  <DataActions onDone={() => { setMore(false); setDataOpen(false); }} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </Sheet>
+      ) : null}
+      {addingSystem ? (
+        <SystemDialog
+          onClose={() => setAddingSystem(false)}
+          onCreated={(s) => {
+            setFilters({ system: s.id });
+            setMore(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

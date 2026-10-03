@@ -24,6 +24,7 @@ import { Assignees, ChecklistBadge, Empty, isOverdue, Loading, StatusPill } from
 import { useFilteredTasks, useUI } from "@/components/ui-context";
 import { fmtShort, todayISO } from "@/lib/dates";
 import { actions, systemOf, useStore } from "@/lib/store";
+import { useIsMobile } from "@/lib/useIsMobile";
 import type { System, SystemId, Task } from "@/lib/types";
 
 type Mode = "deps" | "systems";
@@ -222,7 +223,7 @@ export default function FlowView() {
             </button>
           ))}
         </div>
-        <p className="text-xs text-faint">
+        <p className="hidden text-xs text-faint md:block">
           {mode === "deps"
             ? "Arrows point from a task to the tasks waiting on it. Drag from the purple handle to another task to link them, select an arrow and press Backspace to remove it."
             : "The hub system drives the others. Click a system to see its tasks."}
@@ -239,6 +240,7 @@ export default function FlowView() {
 
 function Canvas({ mode, tasks, onPickSystem }: { mode: Mode; tasks: Task[]; onPickSystem: () => void }) {
   const { openEdit, setFilters } = useUI();
+  const isMobile = useIsMobile();
   const today = todayISO();
   const { systems } = useStore();
   const computed = useMemo(
@@ -267,7 +269,7 @@ function Canvas({ mode, tasks, onPickSystem }: { mode: Mode; tasks: Task[]; onPi
   const onEdgesDelete = useCallback((deleted: Edge[]) => deleted.forEach((e) => actions.removeDependency(e.target, e.source)), []);
 
   return (
-    <div className="h-[calc(100vh-230px)] min-h-[480px] overflow-hidden rounded-xl border border-line bg-[#FAFBFC]">
+    <div className="h-[calc(100dvh-250px)] min-h-[380px] overflow-hidden rounded-xl border border-line bg-[#FAFBFC] md:h-[calc(100vh-230px)] md:min-h-[480px]">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -291,7 +293,7 @@ function Canvas({ mode, tasks, onPickSystem }: { mode: Mode; tasks: Task[]; onPi
       >
         <Background variant={BackgroundVariant.Dots} color="#D5D9E0" gap={20} size={1.4} />
         <Controls showInteractive={false} />
-        {mode === "deps" ? (
+        {mode === "deps" && !isMobile ? (
           <MiniMap
             pannable
             zoomable
