@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WSE Strategy System
 
-## Getting Started
+Plan tracker for the Wall Street English Saudi Arabia growth programme (Clicksalesmedia).
+Next.js 16 (App Router) + Tailwind v4 + React Flow.
 
-First, run the development server:
+## Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Views
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Route | View |
+| --- | --- |
+| `/` | Overview: term progress, KPIs, status mix, progress by system, due soon |
+| `/table` | Sortable table with inline status change |
+| `/pipeline` | Systems x phases matrix (Discovery, Custom build, Testing, Launch, Optimise), drag to move |
+| `/kanban` | Status board (Backlog, To do, In progress, Review, Done), drag to move |
+| `/flow` | Flowchart: task dependency graph (connect handles to add dependencies) and systems map |
+| `/planner` | Gantt planner over the initial term, drag bars to reschedule or resize |
+| `/calendar` | Month calendar by due date, drag chips to reschedule, double-click a day to add |
 
-## Learn More
+## Data
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- All views share one store: `src/lib/store.ts` (localStorage key `wse-strategy-system:v2`). It persists to the
+  browser only (single user, per browser). Replace that module with an API/database for multi-user use.
+- Starting plan in `src/lib/seed.ts`: 10 requests to WSE (tag "Request to WSE") and 8 audit gaps (tag "Gap").
+  Each task has tags and a checklist.
+- Statuses: Backlog, To do, In progress, Waiting, Review, Done.
+- The Data menu (sidebar bottom) has Export JSON, Import JSON, Reset to starting plan and Clear all tasks.
+- Systems and phases follow Annex A of the agreement (8 AI systems + programme governance), term
+  1 Oct 2026 to 31 Dec 2026 (`src/lib/types.ts`).
